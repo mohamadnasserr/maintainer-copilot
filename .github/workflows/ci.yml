@@ -70,6 +70,9 @@ jobs:
       - name: Prepare memory tables
         run: |
           python scripts/setup_memory_tables.py
+      - name: Prepare auth tables
+        run: |
+          python scripts/setup_auth_tables.py
 
       - name: Prepare widget config table
         run: |
