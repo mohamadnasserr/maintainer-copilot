@@ -244,12 +244,12 @@ evals/run_rag_eval.py
 evals/eval_thresholds.yaml
 eval_report.json
 
-Current metrics from the initial 5-example golden set:
+Current metrics from the 25-example golden set:
 
-hit@1  = 0.60
-hit@3  = 0.80
-hit@5  = 0.80
-mrr@10 = 0.72
+hit@1  = 0.92
+hit@3  = 0.96
+hit@5  = 0.96
+mrr@10 = 0.944
 
 Current thresholds:
 

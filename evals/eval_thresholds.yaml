@@ -3,3 +3,6 @@ rag:
   min_hit_at_3: 0.70
   min_hit_at_5: 0.70
   min_mrr_at_10: 0.60
+  min_answer_keyword_coverage: 0.50
+  min_source_url_coverage: 0.80
+  min_faithfulness_proxy: 0.50

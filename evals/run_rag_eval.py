@@ -64,12 +64,29 @@ def load_thresholds(path: Path) -> dict[str, float]:
         if value <= 0:
             raise ValueError(f"Threshold rag.{key} must be greater than zero.")
 
-    return {
+    thresholds = {
         "hit@1": float(rag["min_hit_at_1"]),
         "hit@3": float(rag["min_hit_at_3"]),
         "hit@5": float(rag["min_hit_at_5"]),
         "mrr@10": float(rag["min_mrr_at_10"]),
     }
+
+    # Optional generation thresholds. If they are not present, the script reports
+    # generation metrics but does not fail on them.
+    optional_mapping = {
+        "min_answer_keyword_coverage": "answer_keyword_coverage",
+        "min_source_url_coverage": "source_url_coverage",
+        "min_faithfulness_proxy": "faithfulness_proxy",
+    }
+
+    for yaml_key, metric_name in optional_mapping.items():
+        if yaml_key in rag:
+            value = float(rag[yaml_key])
+            if value <= 0:
+                raise ValueError(f"Threshold rag.{yaml_key} must be greater than zero.")
+            thresholds[metric_name] = value
+
+    return thresholds
 
 
 def reciprocal_rank(
@@ -85,6 +102,81 @@ def reciprocal_rank(
     return 0.0
 
 
+def keyword_coverage(answer: str, expected_phrases: list[str]) -> float:
+    if not expected_phrases:
+        return 1.0
+
+    answer_lower = answer.lower()
+    matched = 0
+
+    for phrase in expected_phrases:
+        if phrase.lower() in answer_lower:
+            matched += 1
+
+    return matched / len(expected_phrases)
+
+
+def source_url_coverage(chunks: list[Any]) -> float:
+    if not chunks:
+        return 0.0
+
+    source_urls = [chunk.source_url for chunk in chunks if chunk.source_url]
+
+    if not source_urls:
+        return 0.0
+
+    github_urls = [
+        url for url in source_urls
+        if url.startswith("https://github.com/pandas-dev/pandas/issues/")
+    ]
+
+    return len(github_urls) / len(source_urls)
+
+
+def faithfulness_proxy(answer: str, chunks: list[Any]) -> float:
+    """
+    Lightweight CPU-only faithfulness proxy.
+
+    This is not a judge model. It checks whether the generated answer overlaps
+    with retrieved source text and includes source-grounded issue references.
+    """
+    if not answer or not chunks:
+        return 0.0
+
+    answer_lower = answer.lower()
+
+    issue_reference_score = 1.0 if "pandas issue #" in answer_lower else 0.0
+
+    chunk_titles = [chunk.title.lower() for chunk in chunks[:3]]
+    title_hits = sum(1 for title in chunk_titles if title and title[:30] in answer_lower)
+    title_score = title_hits / max(len(chunk_titles), 1)
+
+    source_text = " ".join(chunk.text.lower() for chunk in chunks[:3])
+    answer_tokens = {
+        token
+        for token in answer_lower.replace(".", " ").replace(",", " ").split()
+        if len(token) >= 5
+    }
+
+    source_tokens = {
+        token
+        for token in source_text.replace(".", " ").replace(",", " ").split()
+        if len(token) >= 5
+    }
+
+    if not answer_tokens:
+        token_overlap_score = 0.0
+    else:
+        token_overlap_score = len(answer_tokens.intersection(source_tokens)) / len(answer_tokens)
+
+    return round(
+        0.40 * issue_reference_score
+        + 0.30 * title_score
+        + 0.30 * token_overlap_score,
+        4,
+    )
+
+
 def evaluate() -> dict[str, Any]:
     rag = RagPipeline(top_k=10)
     examples = load_golden_set(GOLDEN_PATH)
@@ -96,11 +188,16 @@ def evaluate() -> dict[str, Any]:
     hit_at_5 = 0
     mrr_total = 0.0
 
+    answer_keyword_coverage_total = 0.0
+    source_url_coverage_total = 0.0
+    faithfulness_proxy_total = 0.0
+
     for example in examples:
         question = example["question"]
         expected_issue_numbers = example["expected_issue_numbers"]
+        ideal_answer_contains = example.get("ideal_answer_contains", [])
 
-        chunks = rag.retrieve(question, top_k=10)
+        answer, chunks = rag.answer(question)
 
         retrieved_issue_numbers: list[int] = []
         retrieved_titles: list[str] = []
@@ -122,10 +219,18 @@ def evaluate() -> dict[str, Any]:
         example_hit_at_5 = bool(expected_set.intersection(top_5))
         example_mrr = reciprocal_rank(retrieved_issue_numbers, expected_issue_numbers)
 
+        example_answer_keyword_coverage = keyword_coverage(answer, ideal_answer_contains)
+        example_source_url_coverage = source_url_coverage(chunks)
+        example_faithfulness_proxy = faithfulness_proxy(answer, chunks)
+
         hit_at_1 += int(example_hit_at_1)
         hit_at_3 += int(example_hit_at_3)
         hit_at_5 += int(example_hit_at_5)
         mrr_total += example_mrr
+
+        answer_keyword_coverage_total += example_answer_keyword_coverage
+        source_url_coverage_total += example_source_url_coverage
+        faithfulness_proxy_total += example_faithfulness_proxy
 
         results.append(
             {
@@ -138,6 +243,9 @@ def evaluate() -> dict[str, Any]:
                 "hit@3": example_hit_at_3,
                 "hit@5": example_hit_at_5,
                 "reciprocal_rank": example_mrr,
+                "answer_keyword_coverage": round(example_answer_keyword_coverage, 4),
+                "source_url_coverage": round(example_source_url_coverage, 4),
+                "faithfulness_proxy": round(example_faithfulness_proxy, 4),
             }
         )
 
@@ -153,6 +261,9 @@ def evaluate() -> dict[str, Any]:
             "hit@3": round(hit_at_3 / total, 4),
             "hit@5": round(hit_at_5 / total, 4),
             "mrr@10": round(mrr_total / total, 4),
+            "answer_keyword_coverage": round(answer_keyword_coverage_total / total, 4),
+            "source_url_coverage": round(source_url_coverage_total / total, 4),
+            "faithfulness_proxy": round(faithfulness_proxy_total / total, 4),
         },
         "results": results,
     }
