@@ -5,13 +5,14 @@ from app.api import auth, chat, health, nlp, widget
 from app.api.errors import install_exception_handlers
 from app.infra.config import get_settings
 from app.infra.logging import configure_logging
-from app.infra.vault import require_vault
+from app.infra.vault import require_vault, verify_required_demo_secret
 from app.api.middleware import RequestContextMiddleware
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging()
     require_vault(settings)
+    verify_required_demo_secret()
 
     app = FastAPI(title="Maintainers Copilot", version="0.1.0-week7")
     app.add_middleware(RequestContextMiddleware)
