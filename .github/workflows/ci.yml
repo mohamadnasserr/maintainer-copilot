@@ -74,6 +74,9 @@ jobs:
       - name: Prepare widget config table
         run: |
           python scripts/setup_widget_tables.py
+      - name: Prepare trace span table
+        run: |
+          python scripts/setup_trace_tables.py
 
       - name: Ingest RAG chunks into pgvector
         run: |
