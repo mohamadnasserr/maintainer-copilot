@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.services.chat_service import chat_service
@@ -28,8 +28,10 @@ class MemoryMessage(BaseModel):
     metadata: dict[str, Any]
     timestamp: int
 
+
 class ChatResponse(BaseModel):
     conversation_id: str
+    trace_id: str
     answer: str
     sources: list[Source]
     memory: list[MemoryMessage]
@@ -37,14 +39,20 @@ class ChatResponse(BaseModel):
     long_term_memory_id: int | None = None
     tool_used: str = "rag"
 
+
 @router.post("", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
-    conversation_id = request.conversation_id or request.widget_id
+def chat(request_body: ChatRequest, request: Request) -> ChatResponse:
+    conversation_id = request_body.conversation_id or request_body.widget_id
+
     result = chat_service.answer(
-        message=request.message,
+        message=request_body.message,
         conversation_id=conversation_id,
+        request_id=getattr(request.state, "request_id", None),
+        trace_id=getattr(request.state, "trace_id", None),
     )
+
     return ChatResponse(**result)
+
 
 @router.get("/memory/{conversation_id}")
 def get_memory(conversation_id: str) -> dict[str, Any]:

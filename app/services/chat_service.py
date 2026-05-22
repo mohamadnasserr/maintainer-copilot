@@ -4,6 +4,7 @@ from uuid import uuid4
 from app.infra.rag import RagPipeline
 from app.infra.redis_memory import RedisShortTermMemory
 from app.repositories.memory_repository import MemoryRepository
+from app.repositories.trace_repository import TraceRepository
 from app.services.nlp_tools import extract_entities, summarize_text
 
 
@@ -32,6 +33,7 @@ class ChatService:
         self.rag = RagPipeline()
         self.short_term_memory = RedisShortTermMemory()
         self.long_term_memory = MemoryRepository()
+        self.traces = TraceRepository()
 
     def _extract_prefixed_content(
         self,
@@ -76,12 +78,44 @@ class ChatService:
             f"Strategy: `{result.get('strategy')}`"
         )
 
+    def _finish_root_span(
+        self,
+        span_id: int,
+        started: float,
+        answer: str,
+        tool_used: str,
+    ) -> None:
+        self.traces.finish_span(
+            span_id=span_id,
+            started_perf_counter=started,
+            status="ok",
+            output_preview=answer,
+            attributes={
+                "tool_used": tool_used,
+            },
+        )
+
     def answer(
         self,
         message: str,
         conversation_id: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         active_conversation_id = conversation_id or str(uuid4())
+        active_trace_id = trace_id or str(uuid4())
+
+        root_span_id, root_started = self.traces.start_span(
+            trace_id=active_trace_id,
+            request_id=request_id,
+            conversation_id=active_conversation_id,
+            span_name="chat_request",
+            span_type="chat",
+            input_preview=message,
+            attributes={
+                "conversation_id": active_conversation_id,
+            },
+        )
 
         self.short_term_memory.append_message(
             conversation_id=active_conversation_id,
@@ -123,8 +157,16 @@ class ChatService:
                 limit=10,
             )
 
+            self._finish_root_span(
+                root_span_id,
+                root_started,
+                answer,
+                "write_memory",
+            )
+
             return {
                 "conversation_id": active_conversation_id,
+                "trace_id": active_trace_id,
                 "answer": answer,
                 "sources": [],
                 "memory": recent_memory,
@@ -152,8 +194,16 @@ class ChatService:
                 limit=10,
             )
 
+            self._finish_root_span(
+                root_span_id,
+                root_started,
+                answer,
+                "ner",
+            )
+
             return {
                 "conversation_id": active_conversation_id,
+                "trace_id": active_trace_id,
                 "answer": answer,
                 "sources": [],
                 "memory": recent_memory,
@@ -181,8 +231,16 @@ class ChatService:
                 limit=10,
             )
 
+            self._finish_root_span(
+                root_span_id,
+                root_started,
+                answer,
+                "summarizer",
+            )
+
             return {
                 "conversation_id": active_conversation_id,
+                "trace_id": active_trace_id,
                 "answer": answer,
                 "sources": [],
                 "memory": recent_memory,
@@ -208,8 +266,16 @@ class ChatService:
             limit=10,
         )
 
+        self._finish_root_span(
+            root_span_id,
+            root_started,
+            answer,
+            "rag",
+        )
+
         return {
             "conversation_id": active_conversation_id,
+            "trace_id": active_trace_id,
             "answer": answer,
             "sources": [
                 {
