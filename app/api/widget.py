@@ -1,11 +1,20 @@
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
 
+from app.api.auth import require_admin
 from app.services.widget_service import widget_service
 
 router = APIRouter(tags=["widget"])
+
+
+class WidgetConfigUpdateRequest(BaseModel):
+    allowed_origins: list[str] = Field(default_factory=list)
+    theme: dict[str, Any] = Field(default_factory=dict)
+    greeting: str = Field(..., min_length=1)
+    enabled_tools: list[str] = Field(default_factory=list)
 
 
 def _origin_allowed(origin: str | None, allowed_origins: list[str]) -> bool:
@@ -53,6 +62,27 @@ def config(
     )
 
     return config_data
+
+
+@router.put("/admin/widget/{widget_id}/config")
+def update_widget_config(
+    widget_id: str,
+    payload: WidgetConfigUpdateRequest,
+    current_user: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    updated = widget_service.upsert_config(
+        widget_id=widget_id,
+        allowed_origins=payload.allowed_origins,
+        theme=payload.theme,
+        greeting=payload.greeting,
+        enabled_tools=payload.enabled_tools,
+    )
+
+    return {
+        "status": "updated",
+        "updated_by": current_user["email"],
+        "config": updated,
+    }
 
 
 @router.get("/widget.js", response_class=PlainTextResponse)
