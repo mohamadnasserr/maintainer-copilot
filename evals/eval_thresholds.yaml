@@ -1,0 +1,5 @@
+rag:
+  min_hit_at_1: 0.50
+  min_hit_at_3: 0.70
+  min_hit_at_5: 0.70
+  min_mrr_at_10: 0.60

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node
+node_modules/
+frontend/widget/node_modules/
+frontend/widget/dist/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Local/runtime generated files
+*.log
+eval_report.json
+
+# Docker volumes / local data
+miniodata/
+postgresdata/
+redisdata/
+
+# Large/raw data
+data/raw/

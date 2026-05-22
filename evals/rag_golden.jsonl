@@ -1,0 +1,5 @@
+{"id":"rag-001","question":"What pandas issue discusses groupby.value_counts performance?","expected_issue_numbers":[51750],"ideal_answer_contains":["groupby.value_counts","performance"]}
+{"id":"rag-002","question":"Which pandas issue discusses groupby first documentation and the difference between nth and first?","expected_issue_numbers":[27578],"ideal_answer_contains":["groupby().first","nth","first"]}
+{"id":"rag-003","question":"What issue mentions GroupBy.agg numeric_only deprecation with a custom numpy function?","expected_issue_numbers":[50538],"ideal_answer_contains":["GroupBy.agg","numeric_only","custom function"]}
+{"id":"rag-004","question":"Which pandas issue reports groupby cumulative operations returning Float64 for nullable integers?","expected_issue_numbers":[65550],"ideal_answer_contains":["groupby","Float64","nullable integers"]}
+{"id":"rag-005","question":"What pandas issue proposes adding df.corrupt accessor for data science education?","expected_issue_numbers":[65684],"ideal_answer_contains":["df.corrupt","data science education"]}
