@@ -67,3 +67,15 @@ def get_memory(conversation_id: str) -> dict[str, Any]:
         "memories": memories,
         "audit_count": audit_count,
     }
+
+@router.get("/traces/{conversation_id}")
+def get_traces(conversation_id: str) -> dict[str, Any]:
+    spans = chat_service.traces.list_spans(
+        conversation_id=conversation_id,
+        limit=100,
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "spans": spans,
+    }

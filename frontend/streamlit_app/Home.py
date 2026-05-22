@@ -9,7 +9,9 @@ st.set_page_config(page_title="Maintainers Copilot", layout="wide")
 st.title("Maintainers Copilot")
 st.caption("Internal pandas maintainer chat, memory inspector, and widget configuration.")
 
-tab_chat, tab_widget, tab_memory = st.tabs(["Chat", "Widget Config", "Memory"])
+tab_chat, tab_widget, tab_memory, tab_traces = st.tabs(
+    ["Chat", "Widget Config", "Memory", "Traces"]
+)
 
 
 def call_chat_api(message: str, conversation_id: str) -> dict:
@@ -141,3 +143,53 @@ with tab_memory:
 
         except Exception as exc:
             st.error(f"Failed to load memory: {exc}")
+
+with tab_traces:
+    st.subheader("Trace Inspector")
+
+    trace_conversation_id = st.text_input(
+        "Trace Conversation ID",
+        value=st.session_state.get("conversation_id", "streamlit-local-pandas"),
+    )
+
+    if st.button("Load traces"):
+        try:
+            response = httpx.get(
+                f"{API_URL}/chat/traces/{trace_conversation_id}",
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            spans = data.get("spans", [])
+
+            if not spans:
+                st.info("No trace spans found for this conversation.")
+            else:
+                st.metric("Span count", len(spans))
+
+                root_spans = [
+                    span for span in spans
+                    if span.get("parent_span_id") is None
+                ]
+                child_spans = [
+                    span for span in spans
+                    if span.get("parent_span_id") is not None
+                ]
+
+                st.markdown("### Root spans")
+                for span in root_spans:
+                    with st.expander(
+                        f"{span.get('span_name')} | {span.get('status')} | {span.get('duration_ms')} ms"
+                    ):
+                        st.json(span)
+
+                st.markdown("### Child spans")
+                for span in child_spans:
+                    with st.expander(
+                        f"{span.get('span_name')} | {span.get('span_type')} | {span.get('duration_ms')} ms"
+                    ):
+                        st.json(span)
+
+        except Exception as exc:
+            st.error(f"Failed to load traces: {exc}")
