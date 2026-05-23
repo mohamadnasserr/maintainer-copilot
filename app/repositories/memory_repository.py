@@ -1,9 +1,10 @@
-from importlib.metadata import metadata
 import json
 import os
 from typing import Any
-from app.infra.redaction import redact_for_log
+
 import psycopg
+
+from app.infra.redaction import redact_for_log
 
 DEFAULT_DATABASE_URL = (
     "postgresql://maintainers:maintainers-local-password@localhost:5432/maintainers"
@@ -27,7 +28,6 @@ class MemoryRepository:
         metadata: dict[str, Any] | None = None,
         embedding: str | None = None,
     ) -> int:
-        metadata = metadata or {}
         safe_content = redact_for_log(content)
         safe_metadata = redact_for_log(metadata or {})
 
@@ -85,10 +85,12 @@ class MemoryRepository:
                         "action": "write_memory",
                         "target": f"long_term_memories:{memory_id}",
                         "metadata": json.dumps(
-                            {
-                                "conversation_id": conversation_id,
-                                "memory_type": memory_type,
-                            }
+                            redact_for_log(
+                                {
+                                    "conversation_id": conversation_id,
+                                    "memory_type": memory_type,
+                                }
+                            )
                         ),
                     },
                 )
@@ -96,6 +98,47 @@ class MemoryRepository:
             conn.commit()
 
         return int(memory_id)
+
+    def write_audit_log(
+        self,
+        actor: str,
+        action: str,
+        target: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        safe_metadata = redact_for_log(metadata or {})
+
+        with psycopg.connect(self.database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO audit_logs (
+                        actor,
+                        action,
+                        target,
+                        metadata
+                    )
+                    VALUES (
+                        %(actor)s,
+                        %(action)s,
+                        %(target)s,
+                        %(metadata)s
+                    )
+                    RETURNING id
+                    """,
+                    {
+                        "actor": actor,
+                        "action": action,
+                        "target": target,
+                        "metadata": json.dumps(safe_metadata),
+                    },
+                )
+
+                audit_id = cur.fetchone()[0]
+
+            conn.commit()
+
+        return int(audit_id)
 
     def list_memories(
         self,

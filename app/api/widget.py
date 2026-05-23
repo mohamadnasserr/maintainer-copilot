@@ -3,12 +3,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
-
+from app.repositories.memory_repository import MemoryRepository
 from app.api.auth import require_admin
 from app.services.widget_service import widget_service
 
 router = APIRouter(tags=["widget"])
 
+audit_repository = MemoryRepository()
 
 class WidgetConfigUpdateRequest(BaseModel):
     allowed_origins: list[str] = Field(default_factory=list)
@@ -77,10 +78,22 @@ def update_widget_config(
         greeting=payload.greeting,
         enabled_tools=payload.enabled_tools,
     )
+    audit_id = audit_repository.write_audit_log(
+    actor=current_user["email"],
+    action="widget_config_update",
+    target=f"widget:{widget_id}",
+    metadata={
+        "widget_id": widget_id,
+        "allowed_origins": payload.allowed_origins,
+        "theme": payload.theme,
+        "enabled_tools": payload.enabled_tools,
+    },
+)
 
     return {
         "status": "updated",
         "updated_by": current_user["email"],
+        "audit_id": audit_id,
         "config": updated,
     }
 
