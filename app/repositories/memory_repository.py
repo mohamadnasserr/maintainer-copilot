@@ -1,7 +1,8 @@
+from importlib.metadata import metadata
 import json
 import os
 from typing import Any
-
+from app.infra.redaction import redact_for_log
 import psycopg
 
 DEFAULT_DATABASE_URL = (
@@ -27,6 +28,8 @@ class MemoryRepository:
         embedding: str | None = None,
     ) -> int:
         metadata = metadata or {}
+        safe_content = redact_for_log(content)
+        safe_metadata = redact_for_log(metadata or {})
 
         with psycopg.connect(self.database_url) as conn:
             with conn.cursor() as cur:
@@ -54,8 +57,8 @@ class MemoryRepository:
                         "conversation_id": conversation_id,
                         "actor": actor,
                         "memory_type": memory_type,
-                        "content": content,
-                        "metadata": json.dumps(metadata),
+                        "content": safe_content,
+                        "metadata": json.dumps(safe_metadata),
                         "embedding": embedding,
                     },
                 )
